@@ -1137,7 +1137,10 @@ updateClock();
 function scrollToCard(id, el) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   el.classList.add('active');
-  document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const card = document.getElementById(id);
+  const headerH = document.querySelector('.header').offsetHeight;
+  const top = card.getBoundingClientRect().top + window.scrollY - headerH - 8;
+  window.scrollTo({ top, behavior: 'smooth' });
 }
 
 // ===== SETTINGS MODAL =====
@@ -1159,66 +1162,141 @@ function saveSettings() {
 }
 
 // ===== WEATHER =====
-const weatherData = {
-  nagoya: {
-    temp: 19, desc: '晴れ時々曇り', icon: '🌤️',
-    rain: 10, humidity: 58, wind: 3.2,
-    hourly: [
-      {h:'7時', icon:'🌤️', t:15, r:0},
-      {h:'10時', icon:'☀️', t:18, r:0},
-      {h:'13時', icon:'☀️', t:22, r:0},
-      {h:'16時', icon:'🌥️', t:20, r:10},
-      {h:'19時', icon:'🌧️', t:17, r:60},
-      {h:'22時', icon:'🌧️', t:15, r:70},
-    ]
-  }
-};
-
-function getWeatherEmoji(temp) {
-  if (temp >= 28) return '🥵';
-  if (temp >= 23) return '👕';
-  if (temp >= 18) return '👔';
-  if (temp >= 12) return '🧥';
-  return '🧣';
+// 天気コード → 絵文字・説明のマッピング（Open-Meteo WMO code）
+function weatherCodeToInfo(code) {
+  if (code === 0)            return { icon: '☀️', desc: '快晴' };
+  if (code <= 2)             return { icon: '🌤️', desc: '晴れ時々曇り' };
+  if (code === 3)            return { icon: '☁️', desc: '曇り' };
+  if (code <= 49)            return { icon: '🌫️', desc: '霧' };
+  if (code <= 55)            return { icon: '🌦️', desc: '霧雨' };
+  if (code <= 65)            return { icon: '🌧️', desc: '雨' };
+  if (code <= 75)            return { icon: '🌨️', desc: '雪' };
+  if (code <= 82)            return { icon: '🌧️', desc: 'にわか雨' };
+  if (code <= 86)            return { icon: '🌨️', desc: 'にわか雪' };
+  if (code <= 99)            return { icon: '⛈️', desc: '雷雨' };
+  return { icon: '🌡️', desc: '不明' };
 }
 
-function loadWeather() {
-  const d = weatherData.nagoya;
+function getClothingAdvice(temp) {
+  if (temp >= 28) return { emoji: '👕', text: '半袖でOK・熱中症注意' };
+  if (temp >= 23) return { emoji: '👔', text: '半袖または薄手のトップス' };
+  if (temp >= 18) return { emoji: '🧥', text: '薄手の上着があると安心' };
+  if (temp >= 12) return { emoji: '🧥', text: 'コートが必要' };
+  return { emoji: '🧣', text: 'しっかり防寒を' };
+}
+
+// 都市名→座標（設定で変更可能）
+const CITY_COORDS = {
+  '名古屋': { lat: 35.1815, lon: 136.9066 },
+  '東京':   { lat: 35.6895, lon: 139.6917 },
+  '大阪':   { lat: 34.6937, lon: 135.5023 },
+  '札幌':   { lat: 43.0642, lon: 141.3469 },
+  '福岡':   { lat: 33.5904, lon: 130.4017 },
+};
+
+function getCityCoords(city) {
+  // 完全一致 or 部分一致
+  for (const [name, coords] of Object.entries(CITY_COORDS)) {
+    if (city.includes(name)) return coords;
+  }
+  return CITY_COORDS['名古屋']; // デフォルト
+}
+
+async function loadWeather() {
+  const city = settings.city || '名古屋';
+  const { lat, lon } = getCityCoords(city);
   const unit = settings.tempUnit === 'celsius';
-  const temp = unit ? d.temp : Math.round(d.temp * 9/5 + 32);
   const symbol = unit ? '°C' : '°F';
 
-  document.getElementById('weatherIcon').textContent = d.icon;
-  document.getElementById('weatherTemp').textContent = `${temp}${symbol}`;
-  document.getElementById('weatherDesc').textContent = `${d.desc}　湿度${d.humidity}%　💨 ${d.wind}m/s`;
-  document.getElementById('weatherLoc').textContent = `📍 ${settings.city}`;
+  // ローディング表示
+  document.getElementById('weatherTemp').textContent = '...';
+  document.getElementById('weatherDesc').textContent = '取得中...';
+  document.getElementById('weatherAlerts').innerHTML = '';
+  document.getElementById('weatherHourly').innerHTML = '';
 
-  // Alerts
-  const alerts = document.getElementById('weatherAlerts');
-  alerts.innerHTML = '';
-  const umbrella = d.rain > 30
-    ? `<div class="alert-badge badge-umbrella">☂️ 傘が必要です（降水確率${d.rain}%）</div>`
-    : `<div class="alert-badge badge-clothing">☂️ 傘不要（降水確率${d.rain}%）</div>`;
-  const clothing = `<div class="alert-badge badge-clothing">${getWeatherEmoji(d.temp)} ${d.temp >= 23 ? '半袖でOK' : d.temp >= 18 ? '薄手の上着' : d.temp >= 12 ? 'コートが必要' : '厚着推奨'}</div>`;
-  const uvWarn = d.temp >= 20 ? `<div class="alert-badge badge-warn">☀️ UV注意</div>` : '';
-  alerts.innerHTML = umbrella + clothing + uvWarn;
+  try {
+    const now = new Date();
+    const currentHour = now.getHours();
 
-  // Hourly
-  const hourlyEl = document.getElementById('weatherHourly');
-  hourlyEl.innerHTML = d.hourly.map(h => {
-    const t = unit ? h.t : Math.round(h.t * 9/5 + 32);
-    return `<div class="hourly-item">
-      <div class="hourly-time">${h.h}</div>
-      <div class="hourly-icon">${h.icon}</div>
-      <div class="hourly-temp">${t}${symbol}</div>
-      <div class="hourly-rain">${h.r > 0 ? h.r+'%' : ''}</div>
-    </div>`;
-  }).join('');
+    const url = `https://api.open-meteo.com/v1/forecast`
+      + `?latitude=${lat}&longitude=${lon}`
+      + `&hourly=temperature_2m,precipitation_probability,weathercode,relativehumidity_2m,windspeed_10m`
+      + `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode`
+      + `&timezone=Asia/Tokyo&forecast_days=2`
+      + (unit ? '' : '&temperature_unit=fahrenheit');
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const hourly = data.hourly;
+    const daily  = data.daily;
+
+    // 現在時刻のインデックスを取得
+    const nowIdx = hourly.time.findIndex(t => {
+      const h = new Date(t).getHours();
+      return new Date(t).toDateString() === now.toDateString() && h >= currentHour;
+    });
+    const idx = nowIdx >= 0 ? nowIdx : currentHour;
+
+    // 現在の気象データ
+    const temp     = Math.round(hourly.temperature_2m[idx]);
+    const rain     = hourly.precipitation_probability[idx] ?? 0;
+    const humidity = hourly.relativehumidity_2m[idx] ?? '--';
+    const wind     = hourly.windspeed_10m[idx] ?? '--';
+    const wCode    = hourly.weathercode[idx] ?? 0;
+    const { icon, desc } = weatherCodeToInfo(wCode);
+
+    // 表示更新
+    document.getElementById('weatherIcon').textContent = icon;
+    document.getElementById('weatherTemp').textContent = `${temp}${symbol}`;
+    document.getElementById('weatherDesc').textContent = `${desc}　湿度${humidity}%　💨 ${wind}km/h`;
+    document.getElementById('weatherLoc').textContent = `📍 ${city}`;
+
+    // アラートバッジ
+    const clothing = getClothingAdvice(unit ? temp : Math.round((temp - 32) * 5/9));
+    const umbrella = rain >= 40
+      ? `<div class="alert-badge badge-umbrella">☂️ 傘が必要です（${rain}%）</div>`
+      : rain >= 20
+        ? `<div class="alert-badge badge-warn">☂️ 傘があると安心（${rain}%）</div>`
+        : `<div class="alert-badge badge-clothing">☂️ 傘不要（${rain}%）</div>`;
+    const clothingBadge = `<div class="alert-badge badge-clothing">${clothing.emoji} ${clothing.text}</div>`;
+    const uvBadge = (unit ? temp : Math.round((temp-32)*5/9)) >= 25
+      ? `<div class="alert-badge badge-warn">☀️ UV注意</div>` : '';
+    document.getElementById('weatherAlerts').innerHTML = umbrella + clothingBadge + uvBadge;
+
+    // 時間別予報（現在から6コマ・3時間おき）
+    const hourlyEl = document.getElementById('weatherHourly');
+    const slots = [];
+    for (let i = 0; i < 6; i++) {
+      const si = idx + i * 3;
+      if (si >= hourly.time.length) break;
+      const t = new Date(hourly.time[si]);
+      slots.push({
+        label: `${t.getHours()}時`,
+        icon: weatherCodeToInfo(hourly.weathercode[si] ?? 0).icon,
+        temp: Math.round(hourly.temperature_2m[si]),
+        rain: hourly.precipitation_probability[si] ?? 0,
+      });
+    }
+    hourlyEl.innerHTML = slots.map(s => `
+      <div class="hourly-item">
+        <div class="hourly-time">${s.label}</div>
+        <div class="hourly-icon">${s.icon}</div>
+        <div class="hourly-temp">${s.temp}${symbol}</div>
+        <div class="hourly-rain">${s.rain > 0 ? s.rain+'%' : ''}</div>
+      </div>`).join('');
+
+  } catch(e) {
+    console.error('loadWeather:', e);
+    document.getElementById('weatherTemp').textContent = '--°';
+    document.getElementById('weatherDesc').textContent = '天気の取得に失敗しました';
+    document.getElementById('weatherAlerts').innerHTML =
+      '<div class="alert-badge badge-warn">⚠️ オフラインまたはエラー</div>';
+  }
 }
 
 function refreshWeather() {
-  document.getElementById('weatherTemp').textContent = '...';
-  setTimeout(loadWeather, 800);
+  loadWeather();
 }
 
 // ===== GOOGLE AUTH =====
@@ -1766,9 +1844,9 @@ function init() {
 init();
 
 // Service Worker登録
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator && location.hostname !== 'www.claudeusercontent.com') {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/my-dashboard/sw.js')
+    navigator.serviceWorker.register('/my-dashboard/sw.js', { scope: '/my-dashboard/' })
       .then(() => console.log('SW registered'))
       .catch(e => console.warn('SW error:', e));
   });
