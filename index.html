@@ -1269,11 +1269,11 @@ async function loadWeather() {
     // アラートバッジ
     const clothing = getClothingAdvice(unit ? temp : Math.round((temp - 32) * 5/9));
     const umbrella = rain >= 40
-      ? `<div class="alert-badge badge-umbrella">☂️ 傘が必要です（${rain}%）</div>`
+      ? `<a href="https://tenki.jp/radar/5/" target="_blank" style="text-decoration:none"><div class="alert-badge badge-umbrella" style="cursor:pointer">☂️ 傘が必要です（${rain}%）🔗</div></a>`
       : rain >= 20
-        ? `<div class="alert-badge badge-warn">☂️ 傘があると安心（${rain}%）</div>`
-        : `<div class="alert-badge badge-clothing">☂️ 傘不要（${rain}%）</div>`;
-    const clothingBadge = `<a href="https://tenki.jp/indexes/dress/4/20/" target="_blank" style="text-decoration:none">
+        ? `<a href="https://tenki.jp/radar/5/" target="_blank" style="text-decoration:none"><div class="alert-badge badge-warn" style="cursor:pointer">☂️ 傘があると安心（${rain}%）🔗</div></a>`
+        : `<a href="https://tenki.jp/radar/5/" target="_blank" style="text-decoration:none"><div class="alert-badge badge-clothing" style="cursor:pointer">☂️ 傘不要（${rain}%）🔗</div></a>`;
+    const clothingBadge = `<a href="https://tenki.jp/indexes/dress/5/26/5110/23100/" target="_blank" style="text-decoration:none">
       <div class="alert-badge badge-clothing" style="cursor:pointer">${clothing.emoji} ${clothing.text} 🔗</div>
     </a>`;
     const uvBadge = (unit ? temp : Math.round((temp-32)*5/9)) >= 25
