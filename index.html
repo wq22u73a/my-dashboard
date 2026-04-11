@@ -179,11 +179,15 @@
     margin-top: 2px;
   }
 
-  .weather-location {
-    font-size: 0.72rem;
+  .weather-temp-range {
+    font-size: 0.78rem;
     color: var(--text-muted);
-    margin-top: 4px;
+    margin-top: 2px;
+    display: flex;
+    gap: 8px;
   }
+  .temp-max { color: #ef5350; font-weight: 600; }
+  .temp-min { color: #4fc3f7; font-weight: 600; }
 
   .weather-alerts {
     display: flex;
@@ -887,6 +891,10 @@
       <div class="weather-icon-big" id="weatherIcon">🌤️</div>
       <div class="weather-info">
         <div class="weather-temp" id="weatherTemp">--°</div>
+        <div class="weather-temp-range">
+          <span class="temp-max" id="weatherTempMax">↑ --°</span>
+          <span class="temp-min" id="weatherTempMin">↓ --°</span>
+        </div>
         <div class="weather-desc" id="weatherDesc">取得中...</div>
         <div class="weather-location" id="weatherLoc">📍 名古屋市</div>
       </div>
@@ -1246,6 +1254,12 @@ async function loadWeather() {
     const wCode    = hourly.weathercode[idx] ?? 0;
     const { icon, desc } = weatherCodeToInfo(wCode);
 
+    // 最低・最高気温（dailyから取得）
+    const tempMax = Math.round(daily.temperature_2m_max[0]);
+    const tempMin = Math.round(daily.temperature_2m_min[0]);
+    document.getElementById('weatherTempMax').textContent = `↑ ${tempMax}${symbol}`;
+    document.getElementById('weatherTempMin').textContent = `↓ ${tempMin}${symbol}`;
+
     // 表示更新
     document.getElementById('weatherIcon').textContent = icon;
     document.getElementById('weatherTemp').textContent = `${temp}${symbol}`;
@@ -1259,7 +1273,9 @@ async function loadWeather() {
       : rain >= 20
         ? `<div class="alert-badge badge-warn">☂️ 傘があると安心（${rain}%）</div>`
         : `<div class="alert-badge badge-clothing">☂️ 傘不要（${rain}%）</div>`;
-    const clothingBadge = `<div class="alert-badge badge-clothing">${clothing.emoji} ${clothing.text}</div>`;
+    const clothingBadge = `<a href="https://tenki.jp/indexes/dress/4/20/" target="_blank" style="text-decoration:none">
+      <div class="alert-badge badge-clothing" style="cursor:pointer">${clothing.emoji} ${clothing.text} 🔗</div>
+    </a>`;
     const uvBadge = (unit ? temp : Math.round((temp-32)*5/9)) >= 25
       ? `<div class="alert-badge badge-warn">☀️ UV注意</div>` : '';
     document.getElementById('weatherAlerts').innerHTML = umbrella + clothingBadge + uvBadge;
@@ -1289,6 +1305,8 @@ async function loadWeather() {
   } catch(e) {
     console.error('loadWeather:', e);
     document.getElementById('weatherTemp').textContent = '--°';
+    document.getElementById('weatherTempMax').textContent = '↑ --°';
+    document.getElementById('weatherTempMin').textContent = '↓ --°';
     document.getElementById('weatherDesc').textContent = '天気の取得に失敗しました';
     document.getElementById('weatherAlerts').innerHTML =
       '<div class="alert-badge badge-warn">⚠️ オフラインまたはエラー</div>';
