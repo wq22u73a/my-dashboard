@@ -831,6 +831,29 @@
     flex-shrink: 0;
   }
 
+  .setting-section-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    margin: 14px 0 8px;
+  }
+
+  .setting-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 16px 0;
+  }
+
+  .setting-google-user {
+    font-size: 0.78rem;
+    color: #81c784;
+    background: rgba(76,175,80,0.1);
+    border: 1px solid rgba(76,175,80,0.2);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+  }
+
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   .spinning { display: inline-block; animation: spin 0.8s linear infinite; }
 
@@ -878,17 +901,7 @@
       <div class="card-title"><span class="dot" style="background:#b388ff"></span>スケジュール</div>
       <div style="display:flex;gap:6px">
         <div class="card-action" onclick="openAddEventModal()">＋追加</div>
-        <div class="card-action" id="calSyncBtn" onclick="syncCalendar()" style="display:none">同期</div>
-      </div>
-    </div>
-    <div id="calLoginBanner">
-      <button class="tasks-login-btn" onclick="signInGoogle()">
-        <span>📅</span> Googleカレンダーと連携する
-      </button>
-    </div>
-    <div id="calUserBanner" style="display:none">
-      <div class="tasks-user-row">
-        <span id="calUserName" class="tasks-user-name"></span>
+        <div class="card-action" id="calSyncBtn" onclick="syncCalendar()" style="display:none">🔄 同期</div>
       </div>
     </div>
     <div class="cal-date-tabs" id="calDateTabs"></div>
@@ -900,24 +913,6 @@
     <div class="card-header">
       <div class="card-title"><span class="dot" style="background:#4caf50"></span>Todoリスト</div>
       <div class="card-action" onclick="clearDoneTodos()">完了済み削除</div>
-    </div>
-
-    <!-- Google Tasks 連携バナー -->
-    <div id="tasksLoginBanner">
-      <button class="tasks-login-btn" onclick="signInGoogle()">
-        <span>🔗</span> Googleタスクと連携する
-      </button>
-    </div>
-    <div id="tasksUserBanner" style="display:none">
-      <div class="tasks-user-row">
-        <span id="tasksUserName" class="tasks-user-name"></span>
-        <button class="tasks-logout-btn" onclick="signOutGoogle()">ログアウト</button>
-      </div>
-      <div id="tasksListSelector" style="display:none">
-        <select class="tasks-list-select" id="tasksListSelect" onchange="onTaskListChange()">
-          <option value="">タスクリストを選択...</option>
-        </select>
-      </div>
     </div>
 
     <div class="todo-add-row">
@@ -1060,16 +1055,44 @@
       設定
       <span class="modal-close" onclick="closeSettings()">✕</span>
     </div>
+
+    <!-- Google連携 -->
+    <div class="setting-section-label">🔗 Google連携</div>
+    <div id="settingsGoogleLoggedOut">
+      <button class="gcal-btn" onclick="signInGoogle()">
+        <span>G</span> Googleアカウントと連携する
+      </button>
+      <div style="font-size:0.7rem;color:var(--text-muted);margin-top:6px;line-height:1.6">
+        カレンダーとタスクが同期されます
+      </div>
+    </div>
+    <div id="settingsGoogleLoggedIn" style="display:none">
+      <div class="setting-google-user" id="settingsGoogleUserName"></div>
+      <div id="settingsTaskListRow" style="display:none;margin-top:8px">
+        <div class="event-label">Todoと同期するタスクリスト</div>
+        <select class="tasks-list-select" id="tasksListSelect" onchange="onTaskListChange()" style="margin-top:4px;margin-bottom:0">
+          <option value="">タスクリストを選択...</option>
+        </select>
+      </div>
+      <button class="gcal-btn" onclick="signOutGoogle()" style="margin-top:10px;background:rgba(239,83,80,0.1);border-color:rgba(239,83,80,0.25);color:var(--red)">
+        ログアウト
+      </button>
+    </div>
+
+    <div class="setting-divider"></div>
+
+    <!-- 天気設定 -->
+    <div class="setting-section-label">🌤️ 天気</div>
     <div class="setting-row">
       <div>
-        <div class="setting-label">📍 地域</div>
+        <div class="setting-label">地域</div>
         <div class="setting-sub">天気予報の場所</div>
       </div>
       <input class="setting-input" type="text" id="cityInput" placeholder="例: 名古屋" value="名古屋">
     </div>
     <div class="setting-row">
       <div>
-        <div class="setting-label">🌡️ 温度単位</div>
+        <div class="setting-label">温度単位</div>
       </div>
       <select class="setting-input" id="tempUnit" style="width:80px">
         <option value="celsius">°C</option>
@@ -1247,32 +1270,30 @@ function signOutGoogle() {
   accessToken = null;
   isGoogleConnected = false;
   googleTodos = [];
+  googleEvents = [];
   currentTaskListId = null;
   sessionStorage.removeItem('gAccessToken');
   sessionStorage.removeItem('gUserName');
   localStorage.removeItem('taskListId');
-  document.getElementById('tasksLoginBanner').style.display = 'block';
-  document.getElementById('tasksUserBanner').style.display = 'none';
-  document.getElementById('tasksListSelector').style.display = 'none';
-  document.getElementById('calLoginBanner').style.display = 'block';
-  document.getElementById('calUserBanner').style.display = 'none';
+  // 設定モーダル内表示を戻す
+  document.getElementById('settingsGoogleLoggedOut').style.display = 'block';
+  document.getElementById('settingsGoogleLoggedIn').style.display = 'none';
+  document.getElementById('settingsTaskListRow').style.display = 'none';
   document.getElementById('calSyncBtn').style.display = 'none';
-  googleEvents = [];
+  // ローカルTodoに戻す
   todos = JSON.parse(localStorage.getItem('todos') || '[]');
   renderTodos();
+  buildDateTabs();
+  renderSchedule();
 }
 
 function showUserBanner(name) {
-  // Tasks バナー
-  document.getElementById('tasksLoginBanner').style.display = 'none';
-  document.getElementById('tasksUserBanner').style.display = 'block';
-  document.getElementById('tasksUserName').textContent = `✅ ${name} でログイン中`;
-  // Calendar バナー
-  document.getElementById('calLoginBanner').style.display = 'none';
-  document.getElementById('calUserBanner').style.display = 'block';
-  document.getElementById('calUserName').textContent = `✅ ${name}`;
+  // 設定モーダル内のGoogle連携表示を切り替え
+  document.getElementById('settingsGoogleLoggedOut').style.display = 'none';
+  document.getElementById('settingsGoogleLoggedIn').style.display = 'block';
+  document.getElementById('settingsGoogleUserName').textContent = `✅ ${name} でログイン中`;
+  // 同期ボタン表示
   document.getElementById('calSyncBtn').style.display = 'block';
-  document.getElementById('evGcalNote') && (document.getElementById('evGcalNote').style.display = 'block');
   // カレンダー同期
   syncCalendar();
 }
@@ -1304,7 +1325,7 @@ async function fetchTaskLists() {
       if (l.id === currentTaskListId) opt.selected = true;
       select.appendChild(opt);
     });
-    document.getElementById('tasksListSelector').style.display = 'block';
+    document.getElementById('settingsTaskListRow').style.display = 'block';
 
     // 保存済みリストがあれば自動ロード
     if (currentTaskListId) fetchTasks(currentTaskListId);
@@ -1538,12 +1559,14 @@ function renderSchedule() {
 // ===== GOOGLE CALENDAR API =====
 async function syncCalendar() {
   if (!accessToken) return;
+  const btn = document.getElementById('calSyncBtn');
+  if (btn) { btn.textContent = '⏳'; btn.style.pointerEvents = 'none'; }
   try {
     const now = new Date();
     const timeMin = now.toISOString();
     const timeMax = new Date(now.getTime() + 7 * 86400000).toISOString();
     const data = await gFetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=50`
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=50`
     );
     googleEvents = (data.items || []).map(ev => ({
       id: ev.id,
@@ -1558,7 +1581,11 @@ async function syncCalendar() {
     }));
     buildDateTabs();
     renderSchedule();
-  } catch(e) { console.error('syncCalendar:', e); }
+  } catch(e) {
+    console.error('syncCalendar:', e);
+  } finally {
+    if (btn) { btn.textContent = '🔄 同期'; btn.style.pointerEvents = 'auto'; }
+  }
 }
 
 async function addEventToGcal(ev) {
