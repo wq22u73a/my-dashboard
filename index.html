@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#0f1923">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>My Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -1762,6 +1764,15 @@ function init() {
 }
 
 init();
+
+// Service Worker登録
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/my-dashboard/sw.js')
+      .then(() => console.log('SW registered'))
+      .catch(e => console.warn('SW error:', e));
+  });
+}
 </script>
 </body>
 </html>
