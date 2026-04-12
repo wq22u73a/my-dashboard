@@ -138,6 +138,16 @@
     background: var(--accent);
   }
 
+  .card-icon-btn {
+    font-size: 1.1rem;
+    text-decoration: none;
+    opacity: 0.7;
+    transition: opacity 0.2s, transform 0.15s;
+    display: flex;
+    align-items: center;
+  }
+  .card-icon-btn:active { opacity: 1; transform: scale(0.92); }
+
   .card-action {
     font-size: 0.7rem;
     color: var(--accent);
@@ -909,7 +919,8 @@
   <div class="card" id="scheduleCard">
     <div class="card-header">
       <div class="card-title"><span class="dot" style="background:#b388ff"></span>スケジュール</div>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:6px;align-items:center">
+        <a href="https://calendar.google.com/" target="_blank" class="card-icon-btn" title="Googleカレンダーを開く">📅</a>
         <div class="card-action" onclick="openAddEventModal()">＋追加</div>
         <div class="card-action" id="calSyncBtn" onclick="syncCalendar()" style="display:none">🔄 同期</div>
       </div>
@@ -922,7 +933,10 @@
   <div class="card" id="todoCard">
     <div class="card-header">
       <div class="card-title"><span class="dot" style="background:#4caf50"></span>Todoリスト</div>
-      <div class="card-action" onclick="clearDoneTodos()">完了済み削除</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <a href="https://tasks.google.com/" target="_blank" class="card-icon-btn" title="Googleタスクを開く">✅</a>
+        <div class="card-action" onclick="clearDoneTodos()">完了済み削除</div>
+      </div>
     </div>
 
     <div class="todo-add-row">
