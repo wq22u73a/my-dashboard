@@ -327,10 +327,18 @@
     background: var(--accent);
     border-radius: 3px 0 0 3px;
   }
-  .schedule-item.color-purple::before { background: #b388ff; }
-  .schedule-item.color-green::before  { background: var(--green); }
-  .schedule-item.color-orange::before { background: var(--orange); }
-  .schedule-item.color-red::before    { background: var(--red); }
+  /* GCal 11色対応 */
+  .schedule-item.gcal-1::before  { background: #7986cb; }
+  .schedule-item.gcal-2::before  { background: #33b679; }
+  .schedule-item.gcal-3::before  { background: #8e24aa; }
+  .schedule-item.gcal-4::before  { background: #e67c73; }
+  .schedule-item.gcal-5::before  { background: #f6c026; }
+  .schedule-item.gcal-6::before  { background: #f5511d; }
+  .schedule-item.gcal-7::before  { background: #039be5; }
+  .schedule-item.gcal-8::before  { background: #616161; }
+  .schedule-item.gcal-9::before  { background: #3f51b5; }
+  .schedule-item.gcal-10::before { background: #0b8043; }
+  .schedule-item.gcal-11::before { background: #d60000; }
 
   .schedule-time {
     font-family: var(--font-head);
@@ -1052,13 +1060,19 @@
       <input class="event-input" type="text" id="evPlace" placeholder="例: 栄オフィス">
     </div>
     <div class="event-field">
-      <div class="event-label">カラー</div>
+      <div class="event-label">カラー（Googleカレンダーと同期）</div>
       <div class="event-color-row" id="evColorRow">
-        <div class="event-color-btn selected" style="background:#4fc3f7" data-color="" onclick="selectColor(this)"></div>
-        <div class="event-color-btn" style="background:#b388ff" data-color="color-purple" onclick="selectColor(this)"></div>
-        <div class="event-color-btn" style="background:#4caf50" data-color="color-green" onclick="selectColor(this)"></div>
-        <div class="event-color-btn" style="background:#ff9800" data-color="color-orange" onclick="selectColor(this)"></div>
-        <div class="event-color-btn" style="background:#ef5350" data-color="color-red" onclick="selectColor(this)"></div>
+        <div class="event-color-btn selected" style="background:#7986cb" data-colorid="1"  title="ラベンダー"  onclick="selectColor(this)"></div>
+        <div class="event-color-btn" style="background:#33b679" data-colorid="2"  title="セージ"      onclick="selectColor(this)"></div>
+        <div class="event-color-btn" style="background:#8e24aa" data-colorid="3"  title="グレープ"    onclick="selectColor(this)"></div>
+        <div class="event-color-btn" style="background:#e67c73" data-colorid="4"  title="フラミンゴ"  onclick="selectColor(this)"></div>
+        <div class="event-color-btn" style="background:#f6c026" data-colorid="5"  title="バナナ"      onclick="selectColor(this)"></div>
+        <div class="event-color-btn" style="background:#f5511d" data-colorid="6"  title="タンジェリン" onclick="selectColor(this)"></div>
+        <div class="event-color-btn" style="background:#039be5" data-colorid="7"  title="ピーコック"  onclick="selectColor(this)"></div>
+        <div class="event-color-btn" style="background:#616161" data-colorid="8"  title="グラファイト" onclick="selectColor(this)"></div>
+        <div class="event-color-btn" style="background:#3f51b5" data-colorid="9"  title="ブルーベリー" onclick="selectColor(this)"></div>
+        <div class="event-color-btn" style="background:#0b8043" data-colorid="10" title="バジル"      onclick="selectColor(this)"></div>
+        <div class="event-color-btn" style="background:#d60000" data-colorid="11" title="トマト"      onclick="selectColor(this)"></div>
       </div>
     </div>
 
@@ -1592,12 +1606,18 @@ function clearDoneTodos() {
   }
 }
 
+// ===== GCAL COLOR =====
+// colorId → CSSクラス
+function colorIdToClass(colorId) {
+  return colorId ? `gcal-${colorId}` : 'gcal-7'; // デフォルト:ピーコック
+}
+
 // ===== SCHEDULE STATE =====
 let localEvents = JSON.parse(localStorage.getItem('localEvents') || '[]');
 let googleEvents = [];
 let selectedDate = null;
 let editingEventId = null;
-let selectedColor = '';
+let selectedColorId = '1'; // デフォルト:ラベンダー
 const DAYS = ['日','月','火','水','木','金','土'];
 
 function dateStr(d) {
@@ -1680,17 +1700,21 @@ async function syncCalendar() {
     const data = await gFetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=50`
     );
-    googleEvents = (data.items || []).map(ev => ({
-      id: ev.id,
-      title: ev.summary || '（タイトルなし）',
-      date: (ev.start.dateTime || ev.start.date || '').slice(0, 10),
-      startTime: ev.start.dateTime ? timeStr(ev.start.dateTime) : '',
-      endTime: ev.end.dateTime ? timeStr(ev.end.dateTime) : '',
-      place: ev.location || '',
-      color: 'color-purple',
-      source: 'google',
-      gcalId: ev.id,
-    }));
+    googleEvents = (data.items || []).map(ev => {
+      const colorId = ev.colorId || '7'; // デフォルト:ピーコック
+      return {
+        id: ev.id,
+        title: ev.summary || '（タイトルなし）',
+        date: (ev.start.dateTime || ev.start.date || '').slice(0, 10),
+        startTime: ev.start.dateTime ? timeStr(ev.start.dateTime) : '',
+        endTime: ev.end.dateTime ? timeStr(ev.end.dateTime) : '',
+        place: ev.location || '',
+        colorId,
+        color: colorIdToClass(colorId),
+        source: 'google',
+        gcalId: ev.id,
+      };
+    });
     buildDateTabs();
     renderSchedule();
   } catch(e) {
@@ -1724,7 +1748,12 @@ async function addEventToGcal(ev) {
   try {
     const result = await gFetch(
       'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-      { method: 'POST', body: JSON.stringify({ summary: ev.title, location: ev.place || '', start, end }) }
+      { method: 'POST', body: JSON.stringify({
+        summary: ev.title,
+        location: ev.place || '',
+        colorId: ev.colorId || '7',
+        start, end
+      }) }
     );
     return result;
   } catch(e) { console.error('addEventToGcal:', e); return null; }
@@ -1752,7 +1781,12 @@ async function updateEventOnGcal(ev) {
   try {
     await gFetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events/${ev.gcalId}`,
-      { method: 'PATCH', body: JSON.stringify({ summary: ev.title, location: ev.place || '', start, end }) }
+      { method: 'PATCH', body: JSON.stringify({
+        summary: ev.title,
+        location: ev.place || '',
+        colorId: ev.colorId || '7',
+        start, end
+      }) }
     );
   } catch(e) { console.error('updateEventOnGcal:', e); }
 }
@@ -1783,7 +1817,7 @@ function openAddEventModal() {
     document.getElementById(id).disabled = false;
   });
   document.querySelector('.event-save-btn').style.display = 'block';
-  selectColor(document.querySelector('.event-color-btn[data-color=""]'));
+  selectColor(document.querySelector('.event-color-btn[data-colorid="1"]'));
   document.getElementById('eventModal').classList.add('open');
 }
 
@@ -1802,7 +1836,7 @@ function openEditEventModal(id, source) {
   document.getElementById('evDeleteBtn').style.display = 'block';
   document.getElementById('evGcalNote').style.display = isGoogleConnected ? 'block' : 'none';
 
-  const colorBtn = document.querySelector(`.event-color-btn[data-color="${ev.color || ''}"]`);
+  const colorBtn = document.querySelector(`.event-color-btn[data-colorid="${ev.colorId || '1'}"]`);
   if (colorBtn) selectColor(colorBtn);
 
   // 全フィールドを編集可能に（Google・ローカル問わず）
@@ -1823,7 +1857,7 @@ function closeEventModal(e) {
 function selectColor(btn) {
   document.querySelectorAll('.event-color-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
-  selectedColor = btn.dataset.color;
+  selectedColorId = btn.dataset.colorid || '1';
 }
 
 async function saveEvent() {
@@ -1838,7 +1872,8 @@ async function saveEvent() {
     startTime: document.getElementById('evStart').value,
     endTime:   document.getElementById('evEnd').value,
     place:     document.getElementById('evPlace').value.trim(),
-    color:     selectedColor,
+    colorId:   selectedColorId,
+    color:     colorIdToClass(selectedColorId),
     source:    'local',
   };
 
