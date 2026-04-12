@@ -1688,12 +1688,25 @@ async function syncCalendar() {
 
 async function addEventToGcal(ev) {
   if (!accessToken) return null;
-  const start = ev.startTime
-    ? { dateTime: `${ev.date}T${ev.startTime}:00+09:00` }
-    : { date: ev.date };
-  const end = ev.endTime
-    ? { dateTime: `${ev.date}T${ev.endTime}:00+09:00` }
-    : { date: ev.date };
+
+  let start, end;
+  if (ev.startTime) {
+    // 終了時刻がなければ開始+1時間
+    const endTime = ev.endTime || (() => {
+      const [h, m] = ev.startTime.split(':').map(Number);
+      const endH = String(h + 1).padStart(2, '0');
+      return `${endH}:${m.toString().padStart(2, '0')}`;
+    })();
+    start = { dateTime: `${ev.date}T${ev.startTime}:00+09:00` };
+    end   = { dateTime: `${ev.date}T${endTime}:00+09:00` };
+  } else {
+    // 終日イベント：翌日をendに設定（Google Calendar APIの仕様）
+    const nextDay = new Date(ev.date);
+    nextDay.setDate(nextDay.getDate() + 1);
+    start = { date: ev.date };
+    end   = { date: dateStr(nextDay) };
+  }
+
   try {
     const result = await gFetch(
       'https://www.googleapis.com/calendar/v3/calendars/primary/events',
@@ -1705,12 +1718,23 @@ async function addEventToGcal(ev) {
 
 async function updateEventOnGcal(ev) {
   if (!accessToken || !ev.gcalId) return;
-  const start = ev.startTime
-    ? { dateTime: `${ev.date}T${ev.startTime}:00+09:00` }
-    : { date: ev.date };
-  const end = ev.endTime
-    ? { dateTime: `${ev.date}T${ev.endTime}:00+09:00` }
-    : { date: ev.date };
+
+  let start, end;
+  if (ev.startTime) {
+    const endTime = ev.endTime || (() => {
+      const [h, m] = ev.startTime.split(':').map(Number);
+      const endH = String(h + 1).padStart(2, '0');
+      return `${endH}:${m.toString().padStart(2, '0')}`;
+    })();
+    start = { dateTime: `${ev.date}T${ev.startTime}:00+09:00` };
+    end   = { dateTime: `${ev.date}T${endTime}:00+09:00` };
+  } else {
+    const nextDay = new Date(ev.date);
+    nextDay.setDate(nextDay.getDate() + 1);
+    start = { date: ev.date };
+    end   = { date: dateStr(nextDay) };
+  }
+
   try {
     await gFetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events/${ev.gcalId}`,
