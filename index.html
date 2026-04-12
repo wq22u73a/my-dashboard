@@ -1118,7 +1118,7 @@
 <script>
 // ===== CONFIG =====
 const CLIENT_ID = '271758281746-48sk3vj63m64809ml7nf53giqdfkp4ed.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/tasks https://www.googleapis.com/auth/calendar.readonly';
+const SCOPES = 'https://www.googleapis.com/auth/tasks https://www.googleapis.com/auth/calendar.events';
 
 // ===== STATE =====
 let todos = JSON.parse(localStorage.getItem('todos') || '[]');
@@ -1703,6 +1703,22 @@ async function addEventToGcal(ev) {
   } catch(e) { console.error('addEventToGcal:', e); return null; }
 }
 
+async function updateEventOnGcal(ev) {
+  if (!accessToken || !ev.gcalId) return;
+  const start = ev.startTime
+    ? { dateTime: `${ev.date}T${ev.startTime}:00+09:00` }
+    : { date: ev.date };
+  const end = ev.endTime
+    ? { dateTime: `${ev.date}T${ev.endTime}:00+09:00` }
+    : { date: ev.date };
+  try {
+    await gFetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${ev.gcalId}`,
+      { method: 'PATCH', body: JSON.stringify({ summary: ev.title, location: ev.place || '', start, end }) }
+    );
+  } catch(e) { console.error('updateEventOnGcal:', e); }
+}
+
 async function deleteEventFromGcal(gcalId) {
   if (!accessToken || !gcalId) return;
   try {
@@ -1724,6 +1740,11 @@ function openAddEventModal() {
   document.getElementById('evPlace').value = '';
   document.getElementById('evDeleteBtn').style.display = 'none';
   document.getElementById('evGcalNote').style.display = isGoogleConnected ? 'block' : 'none';
+  // 必ずdisabledをリセット・保存ボタンを表示
+  ['evTitle','evDate','evStart','evEnd','evPlace'].forEach(id => {
+    document.getElementById(id).disabled = false;
+  });
+  document.querySelector('.event-save-btn').style.display = 'block';
   selectColor(document.querySelector('.event-color-btn[data-color=""]'));
   document.getElementById('eventModal').classList.add('open');
 }
@@ -1741,28 +1762,16 @@ function openEditEventModal(id, source) {
   document.getElementById('evEnd').value = ev.endTime || '';
   document.getElementById('evPlace').value = ev.place || '';
   document.getElementById('evDeleteBtn').style.display = 'block';
-  document.getElementById('evGcalNote').style.display = 'none';
+  document.getElementById('evGcalNote').style.display = isGoogleConnected ? 'block' : 'none';
 
   const colorBtn = document.querySelector(`.event-color-btn[data-color="${ev.color || ''}"]`);
   if (colorBtn) selectColor(colorBtn);
 
-  // Googleカレンダーイベントは編集不可（削除のみ）
-  if (source === 'google') {
-    document.getElementById('evTitle').disabled = true;
-    document.getElementById('evDate').disabled = true;
-    document.getElementById('evStart').disabled = true;
-    document.getElementById('evEnd').disabled = true;
-    document.getElementById('evPlace').disabled = true;
-    document.querySelector('.event-save-btn').style.display = 'none';
-    document.getElementById('eventModalTitle').textContent = '予定の詳細（GCal）';
-  } else {
-    document.getElementById('evTitle').disabled = false;
-    document.getElementById('evDate').disabled = false;
-    document.getElementById('evStart').disabled = false;
-    document.getElementById('evEnd').disabled = false;
-    document.getElementById('evPlace').disabled = false;
-    document.querySelector('.event-save-btn').style.display = 'block';
-  }
+  // 全フィールドを編集可能に（Google・ローカル問わず）
+  ['evTitle','evDate','evStart','evEnd','evPlace'].forEach(id => {
+    document.getElementById(id).disabled = false;
+  });
+  document.querySelector('.event-save-btn').style.display = 'block';
 
   document.getElementById('eventModal').classList.add('open');
 }
@@ -1796,18 +1805,39 @@ async function saveEvent() {
   };
 
   if (editingEventId) {
-    const idx = localEvents.findIndex(e => e.id === editingEventId);
-    if (idx !== -1) localEvents[idx] = ev;
+    // ローカルイベントの編集
+    const localIdx = localEvents.findIndex(e => e.id === editingEventId);
+    if (localIdx !== -1) {
+      const old = localEvents[localIdx];
+      ev.gcalId = old.gcalId || null;
+      localEvents[localIdx] = ev;
+      localStorage.setItem('localEvents', JSON.stringify(localEvents));
+      // GCalにも反映（PATCH）
+      if (isGoogleConnected && ev.gcalId) {
+        await updateEventOnGcal(ev);
+      }
+    } else {
+      // Googleイベントの編集
+      const gIdx = googleEvents.findIndex(e => e.id === editingEventId);
+      if (gIdx !== -1) {
+        ev.gcalId = googleEvents[gIdx].gcalId || googleEvents[gIdx].id;
+        ev.source = 'google';
+        googleEvents[gIdx] = ev;
+        if (isGoogleConnected) await updateEventOnGcal(ev);
+      }
+    }
   } else {
+    // 新規追加
     localEvents.unshift(ev);
-    // Googleカレンダーにも追加
     if (isGoogleConnected) {
       const result = await addEventToGcal(ev);
-      if (result) { ev.gcalId = result.id; }
+      if (result) {
+        ev.gcalId = result.id;
+        localEvents[0] = ev;
+      }
     }
+    localStorage.setItem('localEvents', JSON.stringify(localEvents));
   }
-
-  localStorage.setItem('localEvents', JSON.stringify(localEvents));
   selectedDate = date;
   closeEventModal();
   buildDateTabs();
