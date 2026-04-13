@@ -1358,8 +1358,8 @@ function initGoogleAuth() {
   });
 
   // 保存済みトークンがあれば自動復元
-  const savedToken = sessionStorage.getItem('gAccessToken');
-  const savedUser  = sessionStorage.getItem('gUserName');
+  const savedToken = localStorage.getItem('gAccessToken');
+  const savedUser  = localStorage.getItem('gUserName');
   if (savedToken) {
     accessToken = savedToken;
     isGoogleConnected = true;
@@ -1377,14 +1377,14 @@ function onTokenResponse(resp) {
   if (resp.error) { console.error(resp); return; }
   accessToken = resp.access_token;
   isGoogleConnected = true;
-  sessionStorage.setItem('gAccessToken', accessToken);
+  localStorage.setItem('gAccessToken', accessToken);
 
   // ユーザー名取得
   fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
     headers: { Authorization: `Bearer ${accessToken}` }
   }).then(r => r.json()).then(u => {
     const name = u.name || u.email || 'Googleアカウント';
-    sessionStorage.setItem('gUserName', name);
+    localStorage.setItem('gUserName', name);
     showUserBanner(name);
   });
 
@@ -1400,6 +1400,8 @@ function signOutGoogle() {
   currentTaskListId = null;
   sessionStorage.removeItem('gAccessToken');
   sessionStorage.removeItem('gUserName');
+  localStorage.removeItem('gAccessToken');
+  localStorage.removeItem('gUserName');
   localStorage.removeItem('taskListId');
   // 設定モーダル内表示を戻す
   document.getElementById('settingsGoogleLoggedOut').style.display = 'block';
@@ -1900,14 +1902,23 @@ async function saveEvent() {
       }
     }
   } else {
-    // 新規追加
-    localEvents.unshift(ev);
+    // 新規追加：まずGCalにPOSTしてからローカルに保存
     if (isGoogleConnected) {
       const result = await addEventToGcal(ev);
       if (result) {
-        ev.gcalId = result.id;
-        localEvents[0] = ev;
+        // GCalから返ってきたIDとcolorIdをローカルにも保存
+        ev.gcalId   = result.id;
+        ev.colorId  = result.colorId || ev.colorId;
+        ev.color    = colorIdToClass(ev.colorId);
+        ev.source   = 'google';
+        // googleEventsにも追加（syncせず二重登録を防ぐ）
+        googleEvents.unshift({ ...ev });
+      } else {
+        // GCal失敗時はローカルのみ
+        localEvents.unshift(ev);
       }
+    } else {
+      localEvents.unshift(ev);
     }
     localStorage.setItem('localEvents', JSON.stringify(localEvents));
   }
