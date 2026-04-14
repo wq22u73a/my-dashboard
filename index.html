@@ -1355,16 +1355,14 @@ function initGoogleAuth() {
     client_id: CLIENT_ID,
     scope: SCOPES,
     callback: onTokenResponse,
+    prompt: '',  // サイレント再取得（初回同意済みの場合はダイアログなし）
   });
 
-  // 保存済みトークンがあれば自動復元
-  const savedToken = localStorage.getItem('gAccessToken');
-  const savedUser  = localStorage.getItem('gUserName');
-  if (savedToken) {
-    accessToken = savedToken;
-    isGoogleConnected = true;
-    showUserBanner(savedUser || 'Googleアカウント');
-    fetchTaskLists();
+  // 保存済みユーザー名があればサイレントでトークン再取得
+  const savedUser = localStorage.getItem('gUserName');
+  if (savedUser) {
+    // 期限切れの可能性があるため、保存トークンをAPIに使わず再取得する
+    tokenClient.requestAccessToken({ prompt: '' });
   }
 }
 
@@ -1374,21 +1372,41 @@ function signInGoogle() {
 }
 
 function onTokenResponse(resp) {
-  if (resp.error) { console.error(resp); return; }
+  if (resp.error) {
+    // サイレント再取得失敗（未ログイン or 権限なし）→ ログアウト状態に戻す
+    console.warn('Token refresh failed:', resp.error);
+    accessToken = null;
+    isGoogleConnected = false;
+    localStorage.removeItem('gAccessToken');
+    localStorage.removeItem('gUserName');
+    return;
+  }
   accessToken = resp.access_token;
   isGoogleConnected = true;
   localStorage.setItem('gAccessToken', accessToken);
 
-  // ユーザー名取得
-  fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  }).then(r => r.json()).then(u => {
-    const name = u.name || u.email || 'Googleアカウント';
-    localStorage.setItem('gUserName', name);
-    showUserBanner(name);
-  });
+  // ★ 50分後に自動でトークン再取得（有効期限60分の前に更新）
+  setTimeout(() => {
+    if (isGoogleConnected && tokenClient) {
+      tokenClient.requestAccessToken({ prompt: '' });
+    }
+  }, 50 * 60 * 1000);
 
-  fetchTaskLists();
+  // ユーザー名取得（保存済みがあればAPIを叩かない）
+  const savedUser = localStorage.getItem('gUserName');
+  if (savedUser) {
+    showUserBanner(savedUser);
+    fetchTaskLists();
+  } else {
+    fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    }).then(r => r.json()).then(u => {
+      const name = u.name || u.email || 'Googleアカウント';
+      localStorage.setItem('gUserName', name);
+      showUserBanner(name);
+    });
+    fetchTaskLists();
+  }
 }
 
 function signOutGoogle() {
@@ -1428,14 +1446,33 @@ function showUserBanner(name) {
 
 // ===== GOOGLE TASKS API =====
 async function gFetch(url, options = {}) {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
-    }
+  const makeHeaders = () => ({
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
   });
+
+  const res = await fetch(url, { ...options, headers: makeHeaders() });
+
+  // ★ 401 = トークン期限切れ → サイレント再取得してリトライ
+  if (res.status === 401 && tokenClient) {
+    await new Promise(resolve => {
+      const origCallback = tokenClient.callback;
+      tokenClient.callback = (resp) => {
+        tokenClient.callback = origCallback;
+        if (!resp.error) {
+          accessToken = resp.access_token;
+          localStorage.setItem('gAccessToken', accessToken);
+        }
+        resolve();
+      };
+      tokenClient.requestAccessToken({ prompt: '' });
+    });
+    const retry = await fetch(url, { ...options, headers: makeHeaders() });
+    if (!retry.ok) throw new Error(`API Error: ${retry.status}`);
+    return retry.status === 204 ? null : retry.json();
+  }
+
   if (!res.ok) throw new Error(`API Error: ${res.status}`);
   return res.status === 204 ? null : res.json();
 }
